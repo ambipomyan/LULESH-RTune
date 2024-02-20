@@ -4,10 +4,11 @@ RTune version and accordingly Makefile are updated
 
 Compile and run the code
 
-```
+kyan2@cci-carina:~/LLVM-RTune/rtune/src/examples/LULESH-RTune$ make -f Makefile-rtune
 kyan2@cci-carina:~/LLVM-RTune/rtune/src/examples/LULESH-RTune$ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/kyan2/LLVM-RTune/rtune-install/lib
 kyan2@cci-carina:~/LLVM-RTune/rtune/src/examples/LULESH-RTune$ mpirun -np 8 lulesh2.0-rtune -i 10000
-```
+
+======================================================== notes of kyan2 ends ========================================================
 
 This is the README for LULESH 2.0
 
