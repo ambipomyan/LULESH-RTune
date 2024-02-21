@@ -13,7 +13,7 @@ MPI_LIB = /opt/local/lib
 SERCXX = g++ -DUSE_MPI=0
 MPICXX = OMPI_CXX=clang++ mpic++ -DUSE_MPI=1
 CXX = ${MPICXX}
-CXX = clang++ -DUSE_MPI=0
+#CXX = clang++ -DUSE_MPI=0
 
 SOURCES2.0 = \
 	lulesh-rtune.cc \
