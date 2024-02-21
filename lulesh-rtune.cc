@@ -161,6 +161,8 @@ Additional BSD Notice
 
 #include "lulesh.h"
 
+#include "rtune_runtime.h"
+
 /* Work Routines */
 
 static inline
@@ -2732,20 +2734,39 @@ int main(int argc, char *argv[])
    MPI_Barrier(MPI_COMM_WORLD);
 #endif   
    
-   // BEGIN timestep to solution */
+   // BEGIN timestep to solution
 #if USE_MPI   
    double start = MPI_Wtime();
 #else
    timeval start;
    gettimeofday(&start, NULL) ;
 #endif
+
+// RTune region, variable, function, and objective starts
+// Region
+   rtune_region_t *lulesh_region = rtune_region_init("LagrangeLeapFrog");
+// Variables: pre-velocity and post velocity
+   // Provider?
+   //rtune_var_add_ext_diff(rtune_region_t *region, char *name, int total_num_states, rtune_data_type_t type, void *(*provider)(void *), void *provider_arg)
+   //rtune_var_set_update_schedule_attr(rtune_var_t *var, rtune_var_update_kind_t update_lt, rtune_var_update_kind_t update_policy, int update_iteration_start, int batch_size, int update_iteration_stride)
+// Function:
+   //rtune_func_add_threshold(rtune_region_t *region, char *name, rtune_data_type_t type, void *var, void *threshold)
+// Objective:
+   //rtune_objective_add_threshold_down(rtune_region_t *region, char *name, rtune_func_t *model, void *threshold)
+// RTune region, variable, function, and objective ends
+
 //debug to see region sizes
 //   for(Int_t i = 0; i < locDom->numReg(); i++)
 //      std::cout << "region" << i + 1<< "size" << locDom->regElemSize(i) <<std::endl;
    while((locDom->time() < locDom->stoptime()) && (locDom->cycle() < opts.its)) {
+// RTune region begins
+      rtune_region_begin(lulesh_region);
 
       TimeIncrement(*locDom) ;
       LagrangeLeapFrog(*locDom) ;
+
+// RTune region ends
+      rtune_region_end(lulesh_region); // sync and callback
 
       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
          std::cout << "cycle = " << locDom->cycle()       << ", "
