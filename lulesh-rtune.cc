@@ -163,6 +163,85 @@ Additional BSD Notice
 
 #include "rtune_runtime.h"
 
+// ########################
+
+/* User Defined Data Type */
+struct luleshData
+{
+	Domain *locDom;
+	int locWavePos;
+	int globalWavePos;
+	double locVel;
+	double locAcc;
+	double globalVel;
+	int numRanks;
+        int myRank;
+};
+
+typedef struct luleshData LULESHData;
+
+/* User Defined Callbacks */
+
+/** Used locWavePos only as args for test
+void *echo(void *args) {
+   printf("This is a callback!");
+
+   // get speed of wavefront
+   int *tmp_wavePos = (int *)args;
+   int wavePos = *tmp_wavePos;
+   printf("locWavePosition: %d\n", wavePos);
+   *tmp_wavePos += 1;
+
+   // show MPI info
+   int numRanks;
+   int myRank;
+   MPI_Comm_size(MPI_COMM_WORLD, &numRanks);
+   MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+   printf("numRanks: %d, myRank: %d\n", numRanks, myRank);
+
+   return 0;
+}
+ */
+
+void compute_particle_acc(LULESHData *ldata) {
+   // get speed of wavefront
+   int wavePos = ldata->locWavePos;
+   Domain *tmp_locDom = ldata->locDom;
+   double locVel = tmp_locDom->xd(wavePos);
+
+   // get acceleration of particle
+   ldata->locAcc = locVel - ldata->locVel;
+   ldata->locVel = locVel;
+}
+
+/* User Defined Callings */
+void rtune_region_begin_call_threshold(void (*compute_particle_acc)(LULESHData *), LULESHData *ldata) {
+   compute_particle_acc(ldata);
+
+   // MPI info
+   MPI_Comm_size(MPI_COMM_WORLD, &ldata->numRanks);
+   MPI_Comm_rank(MPI_COMM_WORLD, &ldata->myRank);
+   //printf("numRanks: %d, myRank: %d\n", ldata->numRanks, ldata->myRank);
+
+   // check
+   if (ldata->myRank == 0) {
+       if (ldata->locAcc < 0.0) {
+	   ldata->globalVel = ldata->locVel;
+           //printf("Peak Velocity: %lf\n", ldata->globalVel);
+           //printf("Wave Position: %d\n", ldata->locWavePos);
+	   // update
+           ldata->locWavePos += 1;
+           Domain *tmp_locDom = ldata->locDom;
+           ldata->locWavePos %= tmp_locDom->sizeX();
+       } else {
+           //printf("Velocity: %lf\n", ldata->locVel);
+           //printf("Wave Position: %d\n", ldata->locWavePos);
+       }
+   }
+}
+
+// ################################################
+
 /* Work Routines */
 
 static inline
@@ -2744,7 +2823,7 @@ int main(int argc, char *argv[])
 
 // RTune region, variable, function, and objective starts
 // Region
-   rtune_region_t *lulesh_region = rtune_region_init("LagrangeLeapFrog");
+   rtune_region_t *lulesh_region = rtune_region_init("");
 // Variables: pre-velocity and post velocity
    // Provider?
    //rtune_var_add_ext_diff(rtune_region_t *region, char *name, int total_num_states, rtune_data_type_t type, void *(*provider)(void *), void *provider_arg)
@@ -2755,18 +2834,35 @@ int main(int argc, char *argv[])
    //rtune_objective_add_threshold_down(rtune_region_t *region, char *name, rtune_func_t *model, void *threshold)
 // RTune region, variable, function, and objective ends
 
+// develop
+// data
+   LULESHData *ldata = (LULESHData *)malloc(sizeof(struct luleshData));
+   ldata->locDom = locDom;
+   ldata->locWavePos = 1;
+   ldata->locVel = 0.0;
+   ldata->globalVel = 0.0;
+
 //debug to see region sizes
 //   for(Int_t i = 0; i < locDom->numReg(); i++)
 //      std::cout << "region" << i + 1<< "size" << locDom->regElemSize(i) <<std::endl;
    while((locDom->time() < locDom->stoptime()) && (locDom->cycle() < opts.its)) {
 // RTune region begins
-      rtune_region_begin(lulesh_region);
+      rtune_region_begin_develop(lulesh_region); // sync and callbacks
+      /** collect velocity and compute ext_var_diff, then get info and broadcast*/
+      rtune_region_begin_call_threshold(&compute_particle_acc, ldata);
+      /** check threshold*/
+      if (ldata->globalVel <= 280.0 && ldata->globalVel > 0.0) {
+	  printf("Peak velocity: %lf\n", ldata->globalVel);
+          printf("Number of area: %d\n", ldata->locWavePos);
+	  printf("Number of cycles: %d\n", locDom->cycle());
+	  printf("Rank number: %d\n", ldata->myRank);
+      }
 
       TimeIncrement(*locDom) ;
       LagrangeLeapFrog(*locDom) ;
 
 // RTune region ends
-      rtune_region_end(lulesh_region); // sync and callback
+      rtune_region_end_develop(lulesh_region);
 
       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
          std::cout << "cycle = " << locDom->cycle()       << ", "
@@ -2794,7 +2890,7 @@ int main(int argc, char *argv[])
    elapsed_timeG = elapsed_time;
 #endif
 
-   // Write out final viz file */
+   // Write out final viz file
    if (opts.viz) {
       DumpToVisit(*locDom, opts.numFiles, myRank, numRanks) ;
    }
