@@ -208,7 +208,7 @@ void compute_particle_acc(LULESHData *ldata) {
    int wavePos = ldata->locWavePos;
    Domain *tmp_locDom = ldata->locDom;
    double locVel = tmp_locDom->xd(wavePos);
-
+// devide into two parts, provider and analysis, flag yes/no as return
    // get acceleration of particle
    ldata->locAcc = locVel - ldata->locVel;
    ldata->locVel = locVel;
@@ -2841,28 +2841,32 @@ int main(int argc, char *argv[])
    ldata->locWavePos = 1;
    ldata->locVel = 0.0;
    ldata->globalVel = 0.0;
-
+// global/local var to control the while loop
+   // TODO
 //debug to see region sizes
 //   for(Int_t i = 0; i < locDom->numReg(); i++)
 //      std::cout << "region" << i + 1<< "size" << locDom->regElemSize(i) <<std::endl;
    while((locDom->time() < locDom->stoptime()) && (locDom->cycle() < opts.its)) {
 // RTune region begins
       rtune_region_begin_develop(lulesh_region); // sync and callbacks
-      /** collect velocity and compute ext_var_diff, then get info and broadcast*/
-      rtune_region_begin_call_threshold(&compute_particle_acc, ldata);
-      /** check threshold*/
-      if (ldata->globalVel <= 280.0 && ldata->globalVel > 0.0) {
-	  printf("Peak velocity: %lf\n", ldata->globalVel);
-          printf("Number of area: %d\n", ldata->locWavePos);
-	  printf("Number of cycles: %d\n", locDom->cycle());
-	  printf("Rank number: %d\n", ldata->myRank);
-      }
 
       TimeIncrement(*locDom) ;
       LagrangeLeapFrog(*locDom) ;
 
 // RTune region ends
       rtune_region_end_develop(lulesh_region);
+// check objectives in region_end
+      /** collect velocity and compute ext_var_diff, then get info and broadcast*/
+      rtune_region_begin_peak_objective(&compute_particle_acc, ldata);
+      /** check threshold*/
+      rtune_region_begin_threshold_objective(&set_variable_whle_loop_control, ...);
+      // alternate, desgin an API to create a flag by runtime
+      if (ldata->globalVel <= 280.0 && ldata->globalVel > 0.0) {
+	  printf("Peak velocity: %lf\n", ldata->globalVel);
+          printf("Number of area: %d\n", ldata->locWavePos);
+	  printf("Number of cycles: %d\n", locDom->cycle());
+	  printf("Rank number: %d\n", ldata->myRank);
+      }
 
       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
          std::cout << "cycle = " << locDom->cycle()       << ", "
