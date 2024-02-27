@@ -180,65 +180,30 @@ struct luleshData
 
 typedef struct luleshData LULESHData;
 
-/* User Defined Callbacks */
-
-/** Used locWavePos only as args for test
-void *echo(void *args) {
-   printf("This is a callback!");
-
-   // get speed of wavefront
-   int *tmp_wavePos = (int *)args;
-   int wavePos = *tmp_wavePos;
-   printf("locWavePosition: %d\n", wavePos);
-   *tmp_wavePos += 1;
-
-   // show MPI info
-   int numRanks;
-   int myRank;
-   MPI_Comm_size(MPI_COMM_WORLD, &numRanks);
-   MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
-   printf("numRanks: %d, myRank: %d\n", numRanks, myRank);
-
-   return 0;
-}
+/* User Defined Helper Functions */
+/*
+ * provider, receiving variable
+ * analyzer, returning a flag for condition_is_met
+ * callee, actions after condition_is_met
+ * broadcaster, handling MPI_Bcast, being processed for every iterations
  */
 
-void compute_particle_acc(LULESHData *ldata) {
-   // get speed of wavefront
-   int wavePos = ldata->locWavePos;
-   Domain *tmp_locDom = ldata->locDom;
-   double locVel = tmp_locDom->xd(wavePos);
-// devide into two parts, provider and analysis, flag yes/no as return
-   // get acceleration of particle
-   ldata->locAcc = locVel - ldata->locVel;
-   ldata->locVel = locVel;
-}
+/* objective: peak_velocity */
+void provider_peak_velocity_var();
 
-/* User Defined Callings */
-void rtune_region_begin_call_threshold(void (*compute_particle_acc)(LULESHData *), LULESHData *ldata) {
-   compute_particle_acc(ldata);
+int analyzer_peak_velocity_compute_acceleration();
 
-   // MPI info
-   MPI_Comm_size(MPI_COMM_WORLD, &ldata->numRanks);
-   MPI_Comm_rank(MPI_COMM_WORLD, &ldata->myRank);
-   //printf("numRanks: %d, myRank: %d\n", ldata->numRanks, ldata->myRank);
+void callee_peak_velocity_move_wavePos_one_step_forward();
 
-   // check
-   if (ldata->myRank == 0) {
-       if (ldata->locAcc < 0.0) {
-	   ldata->globalVel = ldata->locVel;
-           //printf("Peak Velocity: %lf\n", ldata->globalVel);
-           //printf("Wave Position: %d\n", ldata->locWavePos);
-	   // update
-           ldata->locWavePos += 1;
-           Domain *tmp_locDom = ldata->locDom;
-           ldata->locWavePos %= tmp_locDom->sizeX();
-       } else {
-           //printf("Velocity: %lf\n", ldata->locVel);
-           //printf("Wave Position: %d\n", ldata->locWavePos);
-       }
-   }
-}
+/* objective: threshold */
+void provider_threshold_var();
+
+int analyzer_threshold_compute_diff();
+
+void callee_threshold_print_info();
+
+/* broadcaster */
+void broadcaster();
 
 // ################################################
 
@@ -2823,7 +2788,7 @@ int main(int argc, char *argv[])
 
 // RTune region, variable, function, and objective starts
 // Region
-   rtune_region_t *lulesh_region = rtune_region_init("");
+   //rtune_region_t *lulesh_region = rtune_region_init("");
 // Variables: pre-velocity and post velocity
    // Provider?
    //rtune_var_add_ext_diff(rtune_region_t *region, char *name, int total_num_states, rtune_data_type_t type, void *(*provider)(void *), void *provider_arg)
@@ -2834,39 +2799,15 @@ int main(int argc, char *argv[])
    //rtune_objective_add_threshold_down(rtune_region_t *region, char *name, rtune_func_t *model, void *threshold)
 // RTune region, variable, function, and objective ends
 
-// develop
-// data
-   LULESHData *ldata = (LULESHData *)malloc(sizeof(struct luleshData));
-   ldata->locDom = locDom;
-   ldata->locWavePos = 1;
-   ldata->locVel = 0.0;
-   ldata->globalVel = 0.0;
-// global/local var to control the while loop
-   // TODO
 //debug to see region sizes
 //   for(Int_t i = 0; i < locDom->numReg(); i++)
 //      std::cout << "region" << i + 1<< "size" << locDom->regElemSize(i) <<std::endl;
    while((locDom->time() < locDom->stoptime()) && (locDom->cycle() < opts.its)) {
-// RTune region begins
-      rtune_region_begin_develop(lulesh_region); // sync and callbacks
 
       TimeIncrement(*locDom) ;
       LagrangeLeapFrog(*locDom) ;
 
-// RTune region ends
-      rtune_region_end_develop(lulesh_region);
-// check objectives in region_end
-      /** collect velocity and compute ext_var_diff, then get info and broadcast*/
-      rtune_region_begin_peak_objective(&compute_particle_acc, ldata);
-      /** check threshold*/
-      rtune_region_begin_threshold_objective(&set_variable_whle_loop_control, ...);
-      // alternate, desgin an API to create a flag by runtime
-      if (ldata->globalVel <= 280.0 && ldata->globalVel > 0.0) {
-	  printf("Peak velocity: %lf\n", ldata->globalVel);
-          printf("Number of area: %d\n", ldata->locWavePos);
-	  printf("Number of cycles: %d\n", locDom->cycle());
-	  printf("Rank number: %d\n", ldata->myRank);
-      }
+// insert code here
 
       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
          std::cout << "cycle = " << locDom->cycle()       << ", "
@@ -2911,3 +2852,60 @@ int main(int argc, char *argv[])
 
    return 0 ;
 }
+
+
+/*
+void compute_particle_acc(LULESHData *ldata) {
+   // get speed of wavefront
+   int wavePos = ldata->locWavePos;
+   Domain *tmp_locDom = ldata->locDom;
+   double locVel = tmp_locDom->xd(wavePos);
+// devide into two parts, provider and analysis, flag yes/no as return
+   // get acceleration of particle
+   ldata->locAcc = locVel - ldata->locVel;
+   ldata->locVel = locVel;
+}
+
+void rtune_region_begin_call_threshold(void (*compute_particle_acc)(LULESHData *), LULESHData *ldata) {
+   compute_particle_acc(ldata);
+
+   // MPI info
+   MPI_Comm_size(MPI_COMM_WORLD, &ldata->numRanks);
+   MPI_Comm_rank(MPI_COMM_WORLD, &ldata->myRank);
+   //printf("numRanks: %d, myRank: %d\n", ldata->numRanks, ldata->myRank);
+
+   // check
+   if (ldata->myRank == 0) {
+       if (ldata->locAcc < 0.0) {
+           ldata->globalVel = ldata->locVel;
+           //printf("Peak Velocity: %lf\n", ldata->globalVel);
+           //printf("Wave Position: %d\n", ldata->locWavePos);
+           // update
+           ldata->locWavePos += 1;
+           Domain *tmp_locDom = ldata->locDom;
+           ldata->locWavePos %= tmp_locDom->sizeX();
+       } else {
+           //printf("Velocity: %lf\n", ldata->locVel);
+           //printf("Wave Position: %d\n", ldata->locWavePos);
+       }
+   }
+}
+
+// ##########################################################
+   // alternate, desgin an API to create a flag by runtime
+   if (ldata->globalVel <= 280.0 && ldata->globalVel > 0.0) {
+       printf("Peak velocity: %lf\n", ldata->globalVel);
+       printf("Number of area: %d\n", ldata->locWavePos);
+       printf("Number of cycles: %d\n", locDom->cycle());
+       printf("Rank number: %d\n", ldata->myRank);
+   }
+// ##########################################################
+
+// develop
+// data
+   LULESHData *ldata = (LULESHData *)malloc(sizeof(struct luleshData));
+   ldata->locDom = locDom;
+   ldata->locWavePos = 1;
+   ldata->locVel = 0.0;
+   ldata->globalVel = 0.0;
+ */
