@@ -191,19 +191,19 @@ typedef struct luleshData LULESHData;
 /* objective: peak_velocity */
 void provider_peak_velocity_var();
 
-int analyzer_peak_velocity_compute_acceleration();
+//int analyzer_peak_velocity_compute_acceleration();
 
-void callee_peak_velocity_move_wavePos_one_step_forward();
+//void callee_peak_velocity_move_wavePos_one_step_forward();
 
 /* objective: threshold */
-void provider_threshold_var();
+//void provider_threshold_var();
 
-int analyzer_threshold_compute_diff();
+//int analyzer_threshold_compute_diff();
 
-void callee_threshold_print_info();
+//void callee_threshold_print_info();
 
 /* broadcaster */
-void broadcaster();
+//void broadcaster();
 
 // ################################################
 
@@ -2806,8 +2806,22 @@ int main(int argc, char *argv[])
 
       TimeIncrement(*locDom) ;
       LagrangeLeapFrog(*locDom) ;
+      
+/* RTune_region_end begins */
+      provider_peak_velocity_var();
 
-// insert code here
+      //analyzer_peak_velocity_compute_acceleration();
+
+      //callee_peak_velocity_move_wavePos_one_step_forward();
+
+      //provider_threshold_var();
+
+      //analyzer_threshold_compute_diff();
+
+      //callee_threshold_print_info();
+// broadcast
+      //broadcaster();
+/* RTune_region_end ends */
 
       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
          std::cout << "cycle = " << locDom->cycle()       << ", "
@@ -2853,6 +2867,23 @@ int main(int argc, char *argv[])
    return 0 ;
 }
 
+void provider_peak_velocity_var() {
+
+}
+
+/*
+int analyzer_peak_velocity_compute_acceleration();
+
+void callee_peak_velocity_move_wavePos_one_step_forward();
+
+void provider_threshold_var();
+
+int analyzer_threshold_compute_diff();
+
+void callee_threshold_print_info();
+// broadcast
+void broadcaster();
+ */
 
 /*
 void compute_particle_acc(LULESHData *ldata) {
