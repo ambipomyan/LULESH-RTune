@@ -174,8 +174,11 @@ struct luleshData
 	double locVel;
 	double locVel_old;
 	double locAcc;
+	double currVel;
+	int peak_velocity_condition_is_met;
 	double globalVel;
 	double threshold;
+	int threshold_condition_is_met;
 	int numRanks;
 	int workRank;
         int myRank;
@@ -194,16 +197,16 @@ typedef struct luleshData LULESHData;
 /* objective: peak_velocity */
 void provider_peak_velocity_var(LULESHData *ldata);
 
-int analyzer_peak_velocity_compute_acceleration(LULESHData *ldata);
+void analyzer_peak_velocity_compute_acceleration(LULESHData *ldata);
 
-void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata, int condition_is_met);
+void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata);
 
 /* objective: threshold */
-//void provider_threshold_var();
+void provider_threshold_var(LULESHData *ldata);
 
-//int analyzer_threshold_compute_diff();
+void analyzer_threshold_compute_diff(LULESHData *ldata);
 
-//void callee_threshold_print_info();
+void callee_threshold_print_info(LULESHData *ldata);
 
 /* broadcaster */
 void broadcaster(LULESHData *ldata, int if_MPI_Bcast);
@@ -2811,8 +2814,10 @@ int main(int argc, char *argv[])
    ldata->locWavePosMax = locDom->sizeX();
    ldata->globalWavePos = 1;
    ldata->workRank = 0;
+   ldata->peak_velocity_condition_is_met = 0;
 // threshold vars
    ldata->threshold = 280.0;
+   ldata->threshold_condition_is_met = 0;
 // if MPI_Bcast is needed
    int if_MPI_Bcast = 1;
    MPI_Comm_size(MPI_COMM_WORLD, &ldata->numRanks);
@@ -2830,19 +2835,22 @@ int main(int argc, char *argv[])
 // #####################################
       //if (myRank == 0) printf("velocity: %f, Vel: %f, Vel_old: %f\n", locDom->xd(3), ldata->locVel, ldata->locVel_old);
 // RTune_region_end begins
+// objective: peak velocity
       provider_peak_velocity_var(ldata);
 
-      int condition_is_met = analyzer_peak_velocity_compute_acceleration(ldata);
+      analyzer_peak_velocity_compute_acceleration(ldata);
 
-      callee_peak_velocity_move_wavePos_one_step_forward(ldata, condition_is_met);
+      callee_peak_velocity_move_wavePos_one_step_forward(ldata);
+// objective: threshold
+      provider_threshold_var(ldata);
 
-      //provider_threshold_var();
+      analyzer_threshold_compute_diff(ldata);
 
-      //analyzer_threshold_compute_diff();
-
-      //callee_threshold_print_info();
+      callee_threshold_print_info(ldata);
 // broadcast
+#if USE_MPI
       broadcaster(ldata, if_MPI_Bcast);
+#endif
 // RTune_region_end ends
 
       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
@@ -2896,24 +2904,22 @@ void provider_peak_velocity_var(LULESHData *ldata) {
     ldata->locVel = ldata->locDom->xd(ldata->locWavePos);
 }
 
-int analyzer_peak_velocity_compute_acceleration(LULESHData *ldata) {
-    int condition_is_met = 0;
+void analyzer_peak_velocity_compute_acceleration(LULESHData *ldata) {
     ldata->locAcc = ldata->locVel - ldata->locVel_old;
     ldata->locVel_old = ldata->locVel;
     
     if (ldata->locAcc < 0.0) {
-	condition_is_met = 1;
+	ldata->peak_velocity_condition_is_met = 1;
     }
-    
-    return condition_is_met;
 }
 
-void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata, int condition_is_met) {
-    if (condition_is_met) {
-	printf("Condition is met!\n");
+void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata) {
+    if (ldata->peak_velocity_condition_is_met) {
+	printf("# Objective Peak Velocity Reached!:");
 	ldata->locWavePos += 1;
 	ldata->globalWavePos += 1;
 	ldata->locVel_old = 0.0;
+	ldata->currVel = ldata->locVel;
 
 	// shift MPI rank
 	if (ldata->locWavePos >= ldata->locWavePosMax) {
@@ -2921,61 +2927,40 @@ void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata, int c
 	    ldata->locWavePos %= ldata->locWavePosMax;
 	}
 	// info
-	printf("workRank: %d\n", ldata->workRank);
-	printf("locVel: %f\n", ldata->locVel);
+	printf("workRank: %d:", ldata->workRank);
+	printf("locVel: %f:", ldata->locVel);
 	printf("globalWavePos: %d\n", ldata->globalWavePos);
+
+	ldata->peak_velocity_condition_is_met = 0;
     }
 }
 
-/*
-void provider_threshold_var();
+void provider_threshold_var(LULESHData *ldata) {
+    ldata->globalVel = ldata->currVel;
+}
 
-int analyzer_threshold_compute_diff();
+void analyzer_threshold_compute_diff(LULESHData *ldata) {
+    if (ldata->threshold - ldata->globalVel >= 0.0 && ldata->globalVel > 0.0) {
+        ldata->threshold_condition_is_met = 1;
+    }
+}
 
-void callee_threshold_print_info();
- */
+void callee_threshold_print_info(LULESHData *ldata) {
+    if (ldata->threshold_condition_is_met) {
+	printf("## Objective Threshold Reached!:");
+        // info
+	printf("myRank: %d:", ldata->myRank);
+	printf("globalVel: %f:", ldata->globalVel);
+        printf("cycles: %d\n", ldata->locDom->cycle());
+    
+        ldata->threshold_condition_is_met = 0;
+    }
+}
 
-// broadcast
 void broadcaster(LULESHData *ldata, int if_MPI_Bcast) {
     if (if_MPI_Bcast) {
- 
+	MPI_Bcast(&ldata->threshold_condition_is_met, 1, MPI_INT, ldata->workRank, MPI_COMM_WORLD);
+        MPI_Bcast(&ldata->currVel, 1, MPI_FLOAT, ldata->workRank, MPI_COMM_WORLD);
     }
 }
 // #####################################################
-
-/*
-void rtune_region_begin_call_threshold(void (*compute_particle_acc)(LULESHData *), LULESHData *ldata) {
-   compute_particle_acc(ldata);
-
-   // MPI info
-   MPI_Comm_size(MPI_COMM_WORLD, &ldata->numRanks);
-   MPI_Comm_rank(MPI_COMM_WORLD, &ldata->myRank);
-   //printf("numRanks: %d, myRank: %d\n", ldata->numRanks, ldata->myRank);
-
-   // check
-   if (ldata->myRank == 0) {
-       if (ldata->locAcc < 0.0) {
-           ldata->globalVel = ldata->locVel;
-           //printf("Peak Velocity: %lf\n", ldata->globalVel);
-           //printf("Wave Position: %d\n", ldata->locWavePos);
-           // update
-           ldata->locWavePos += 1;
-           Domain *tmp_locDom = ldata->locDom;
-           ldata->locWavePos %= tmp_locDom->sizeX();
-       } else {
-           //printf("Velocity: %lf\n", ldata->locVel);
-           //printf("Wave Position: %d\n", ldata->locWavePos);
-       }
-   }
-}
-
-// ##########################################################
-   // alternate, desgin an API to create a flag by runtime
-   if (ldata->globalVel <= 280.0 && ldata->globalVel > 0.0) {
-       printf("Peak velocity: %lf\n", ldata->globalVel);
-       printf("Number of area: %d\n", ldata->locWavePos);
-       printf("Number of cycles: %d\n", locDom->cycle());
-       printf("Rank number: %d\n", ldata->myRank);
-   }
-// ##########################################################
- */
