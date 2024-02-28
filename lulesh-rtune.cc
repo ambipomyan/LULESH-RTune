@@ -164,17 +164,20 @@ Additional BSD Notice
 #include "rtune_runtime.h"
 
 // ########################
-
 /* User Defined Data Type */
 struct luleshData
 {
 	Domain *locDom;
 	int locWavePos;
+	int locWavePosMax;
 	int globalWavePos;
 	double locVel;
+	double locVel_old;
 	double locAcc;
 	double globalVel;
+	double threshold;
 	int numRanks;
+	int workRank;
         int myRank;
 };
 
@@ -189,11 +192,11 @@ typedef struct luleshData LULESHData;
  */
 
 /* objective: peak_velocity */
-void provider_peak_velocity_var();
+void provider_peak_velocity_var(LULESHData *ldata);
 
-//int analyzer_peak_velocity_compute_acceleration();
+int analyzer_peak_velocity_compute_acceleration(LULESHData *ldata);
 
-//void callee_peak_velocity_move_wavePos_one_step_forward();
+void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata, int condition_is_met);
 
 /* objective: threshold */
 //void provider_threshold_var();
@@ -203,9 +206,8 @@ void provider_peak_velocity_var();
 //void callee_threshold_print_info();
 
 /* broadcaster */
-//void broadcaster();
-
-// ################################################
+void broadcaster(LULESHData *ldata, int if_MPI_Bcast);
+// ###################################################
 
 /* Work Routines */
 
@@ -2799,6 +2801,24 @@ int main(int argc, char *argv[])
    //rtune_objective_add_threshold_down(rtune_region_t *region, char *name, rtune_func_t *model, void *threshold)
 // RTune region, variable, function, and objective ends
 
+// ####################################################################
+// data
+   LULESHData *ldata = (LULESHData *)malloc(sizeof(struct luleshData));
+// peak velocity vars
+   ldata->locDom = locDom;
+   ldata->locVel_old = 0.0;
+   ldata->locWavePos = 1;
+   ldata->locWavePosMax = locDom->sizeX();
+   ldata->globalWavePos = 1;
+   ldata->workRank = 0;
+// threshold vars
+   ldata->threshold = 280.0;
+// if MPI_Bcast is needed
+   int if_MPI_Bcast = 1;
+   MPI_Comm_size(MPI_COMM_WORLD, &ldata->numRanks);
+   MPI_Comm_rank(MPI_COMM_WORLD, &ldata->myRank);
+// #####################################################################
+
 //debug to see region sizes
 //   for(Int_t i = 0; i < locDom->numReg(); i++)
 //      std::cout << "region" << i + 1<< "size" << locDom->regElemSize(i) <<std::endl;
@@ -2806,13 +2826,15 @@ int main(int argc, char *argv[])
 
       TimeIncrement(*locDom) ;
       LagrangeLeapFrog(*locDom) ;
-      
+
+// #####################################
+      //if (myRank == 0) printf("velocity: %f, Vel: %f, Vel_old: %f\n", locDom->xd(3), ldata->locVel, ldata->locVel_old);
 /* RTune_region_end begins */
-      provider_peak_velocity_var();
+      provider_peak_velocity_var(ldata);
 
-      //analyzer_peak_velocity_compute_acceleration();
+      int condition_is_met = analyzer_peak_velocity_compute_acceleration(ldata);
 
-      //callee_peak_velocity_move_wavePos_one_step_forward();
+      callee_peak_velocity_move_wavePos_one_step_forward(ldata, condition_is_met);
 
       //provider_threshold_var();
 
@@ -2820,7 +2842,7 @@ int main(int argc, char *argv[])
 
       //callee_threshold_print_info();
 // broadcast
-      //broadcaster();
+      broadcaster(ldata, if_MPI_Bcast);
 /* RTune_region_end ends */
 
       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
@@ -2867,23 +2889,59 @@ int main(int argc, char *argv[])
    return 0 ;
 }
 
-void provider_peak_velocity_var() {
 
+// #################################################
+// helper functions
+void provider_peak_velocity_var(LULESHData *ldata) {
+    ldata->locVel = ldata->locDom->xd(ldata->locWavePos);
+}
+
+int analyzer_peak_velocity_compute_acceleration(LULESHData *ldata) {
+    int condition_is_met = 0;
+    ldata->locAcc = ldata->locVel - ldata->locVel_old;
+    ldata->locVel_old = ldata->locVel;
+    
+    if (ldata->locAcc < 0.0) {
+	condition_is_met = 1;
+    }
+    
+    return condition_is_met;
+}
+
+void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata, int condition_is_met) {
+    if (condition_is_met) {
+	printf("Condition is met!\n");
+	ldata->locWavePos += 1;
+	ldata->globalWavePos += 1;
+	ldata->locVel_old = 0.0;
+
+	// shift MPI rank
+	if (ldata->locWavePos >= ldata->locWavePosMax) {
+	    ldata->workRank += 1;
+	    ldata->locWavePos %= ldata->locWavePosMax;
+	}
+	// info
+	printf("workRank: %d\n", ldata->workRank);
+	printf("locVel: %f\n", ldata->locVel);
+	printf("globalWavePos: %d\n", ldata->globalWavePos);
+    }
 }
 
 /*
-int analyzer_peak_velocity_compute_acceleration();
-
-void callee_peak_velocity_move_wavePos_one_step_forward();
-
 void provider_threshold_var();
 
 int analyzer_threshold_compute_diff();
 
 void callee_threshold_print_info();
-// broadcast
-void broadcaster();
  */
+
+// broadcast
+void broadcaster(LULESHData *ldata, int if_MPI_Bcast) {
+    if (if_MPI_Bcast) {
+ 
+    }
+}
+// #####################################################
 
 /*
 void compute_particle_acc(LULESHData *ldata) {
@@ -2931,12 +2989,4 @@ void rtune_region_begin_call_threshold(void (*compute_particle_acc)(LULESHData *
        printf("Rank number: %d\n", ldata->myRank);
    }
 // ##########################################################
-
-// develop
-// data
-   LULESHData *ldata = (LULESHData *)malloc(sizeof(struct luleshData));
-   ldata->locDom = locDom;
-   ldata->locWavePos = 1;
-   ldata->locVel = 0.0;
-   ldata->globalVel = 0.0;
  */
