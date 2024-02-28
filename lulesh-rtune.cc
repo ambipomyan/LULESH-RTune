@@ -164,7 +164,7 @@ Additional BSD Notice
 #include "rtune_runtime.h"
 
 // ########################
-/* User Defined Data Type */
+// User Defined Data Type
 struct luleshData
 {
 	Domain *locDom;
@@ -2829,7 +2829,7 @@ int main(int argc, char *argv[])
 
 // #####################################
       //if (myRank == 0) printf("velocity: %f, Vel: %f, Vel_old: %f\n", locDom->xd(3), ldata->locVel, ldata->locVel_old);
-/* RTune_region_end begins */
+// RTune_region_end begins
       provider_peak_velocity_var(ldata);
 
       int condition_is_met = analyzer_peak_velocity_compute_acceleration(ldata);
@@ -2843,7 +2843,7 @@ int main(int argc, char *argv[])
       //callee_threshold_print_info();
 // broadcast
       broadcaster(ldata, if_MPI_Bcast);
-/* RTune_region_end ends */
+// RTune_region_end ends
 
       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
          std::cout << "cycle = " << locDom->cycle()       << ", "
@@ -2944,17 +2944,6 @@ void broadcaster(LULESHData *ldata, int if_MPI_Bcast) {
 // #####################################################
 
 /*
-void compute_particle_acc(LULESHData *ldata) {
-   // get speed of wavefront
-   int wavePos = ldata->locWavePos;
-   Domain *tmp_locDom = ldata->locDom;
-   double locVel = tmp_locDom->xd(wavePos);
-// devide into two parts, provider and analysis, flag yes/no as return
-   // get acceleration of particle
-   ldata->locAcc = locVel - ldata->locVel;
-   ldata->locVel = locVel;
-}
-
 void rtune_region_begin_call_threshold(void (*compute_particle_acc)(LULESHData *), LULESHData *ldata) {
    compute_particle_acc(ldata);
 
