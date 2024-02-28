@@ -176,6 +176,7 @@ struct luleshData
 	double locAcc;
 	double currVel;
 	int peak_velocity_condition_is_met;
+	double globalDiff;
 	double globalVel;
 	double threshold;
 	int threshold_condition_is_met;
@@ -2816,6 +2817,7 @@ int main(int argc, char *argv[])
    ldata->workRank = 0;
    ldata->peak_velocity_condition_is_met = 0;
 // threshold vars
+   ldata->globalDiff = 1.0;
    ldata->threshold = 280.0;
    ldata->threshold_condition_is_met = 0;
 // if MPI_Bcast is needed
@@ -2940,7 +2942,8 @@ void provider_threshold_var(LULESHData *ldata) {
 }
 
 void analyzer_threshold_compute_diff(LULESHData *ldata) {
-    if (ldata->threshold - ldata->globalVel >= 0.0 && ldata->globalVel > 0.0) {
+    ldata->globalDiff = ldata->threshold - ldata->globalVel;
+    if (ldata->globalDiff >= 0.0 && ldata->globalVel > 0.1) {
         ldata->threshold_condition_is_met = 1;
     }
 }
@@ -2951,6 +2954,7 @@ void callee_threshold_print_info(LULESHData *ldata) {
         // info
 	printf("myRank: %d:", ldata->myRank);
 	printf("globalVel: %f:", ldata->globalVel);
+	printf("globalDiff: %f:", ldata->globalDiff);
         printf("cycles: %d\n", ldata->locDom->cycle());
     
         ldata->threshold_condition_is_met = 0;
@@ -2959,8 +2963,8 @@ void callee_threshold_print_info(LULESHData *ldata) {
 
 void broadcaster(LULESHData *ldata, int if_MPI_Bcast) {
     if (if_MPI_Bcast) {
+	MPI_Bcast(&ldata->globalVel, 1, MPI_FLOAT, ldata->workRank, MPI_COMM_WORLD);
 	MPI_Bcast(&ldata->threshold_condition_is_met, 1, MPI_INT, ldata->workRank, MPI_COMM_WORLD);
-        MPI_Bcast(&ldata->currVel, 1, MPI_FLOAT, ldata->workRank, MPI_COMM_WORLD);
     }
 }
 // #####################################################
