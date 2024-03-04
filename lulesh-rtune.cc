@@ -2836,7 +2836,7 @@ int main(int argc, char *argv[])
 // RTune_region_end begins
       if (ldata->workRank == ldata->myRank) {
 // objective: peak velocity
-          provider_peak_velocity_var(ldata);
+          provider_peak_velocity_var(ldata); // user defined, considering put the if condition into the provider
 
           analyzer_peak_velocity_compute_acceleration(ldata);
 
@@ -2926,7 +2926,7 @@ void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata) {
 	printf("locVel: %f:", ldata->locVel);
 	printf("globalWavePos: %d\n", ldata->locWavePos+ldata->workRank*ldata->locWavePosMax);
 
-	//ldata->peak_velocity_condition_is_met = 0;
+	ldata->peak_velocity_condition_is_met = 0;
     }
 }
 
@@ -2960,13 +2960,15 @@ void broadcaster(LULESHData *ldata) {
 
     if (ldata->locWavePos > ldata->locWavePosMax) {
         ldata->workRank += 1;
-	ldata->locWavePos = 1;
+	ldata->locWavePos = 1; // only useful for workRank
     }
 
+/*
     if (ldata->workRank == ldata->myRank) {
         ldata->peak_velocity_condition_is_met = 0;
-	ldata->threshold_condition_is_met = 0;
+	ldata->threshold_condition_is_met = 0; // used for overhead testing, temprary put into comment
     }
+ */
 
     //if (ldata->myRank == 5) printf("locWavePos = %d:workRank = %d\n", ldata->locWavePos, ldata->workRank);
     //if (ldata->myRank == 0) printf("locWavePos = %d:workRank = %d\n", ldata->locWavePos, ldata->workRank);
