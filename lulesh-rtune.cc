@@ -2816,7 +2816,7 @@ int main(int argc, char *argv[])
    ldata->peak_velocity_condition_is_met = 0;
 // threshold vars
    ldata->globalDiff = 1.0;
-   ldata->threshold = 30.0;
+   ldata->threshold = 179.3;
    ldata->threshold_condition_is_met = 0;
 // if MPI_Bcast is needed
    MPI_Comm_size(MPI_COMM_WORLD, &ldata->numRanks);
@@ -2948,7 +2948,8 @@ void callee_threshold_print_info(LULESHData *ldata) {
 	printf("myRank: %d:", ldata->myRank);
 	printf("globalVel: %f:", ldata->globalVel);
 	printf("globalDiff: %f:", ldata->globalDiff);
-        printf("cycles: %d\n", ldata->locDom->cycle());
+	printf("cycles: %d\n", ldata->locDom->cycle());
+        //printf("time: %f\n", ldata->locDom->time());
     
         //ldata->threshold_condition_is_met = 0;
     }
