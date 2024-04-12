@@ -2827,7 +2827,7 @@ int main(int argc, char *argv[])
 // init provider, given by users
 // double td_var_provider(Domain *locDom, int loc);
 // add analysis
-   td_region_add_analysis(lulesh_region, td_var_provider, lulesh_loc, Data_View, lulesh_iter, 25.26, 0);
+   td_region_add_analysis(lulesh_region, td_var_provider, lulesh_loc, Simulation_Prediction, lulesh_iter, 25.26, 0);
 // init ends
 
 //debug to see region sizes
@@ -3002,7 +3002,7 @@ void td_region_end(td_region_t *td_region) {
 	} else if (ldata->method == Simulation_Prediction) {
 	    //gradient decreasing for regression parameters updating
 	} else {
-	    printf("Not Implemented!!!\n");
+	    //printf("Not Implemented!!!\n");
 	}
       }
 // broadcast
