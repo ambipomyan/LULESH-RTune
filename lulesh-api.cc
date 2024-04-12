@@ -239,6 +239,26 @@ double td_var_provider(Domain *locDom, int loc) {
     return v;
 } 
 
+// regression
+double td_var_regression(int iters, int model_size, double *X, double y, double *a) {
+    double b;
+    // init
+    for (int i = 0; i < model_size; i++) {
+        a[i] = 0.1;
+    }
+    b = 0.0;
+
+    //compute
+    a[0] = 0.6049 + 0.0001*iters;
+    a[1] = 0.2628;
+    a[2] = -0.0444;
+    a[3] = -0.00396;
+
+    b = 2.237;
+
+    return b;
+}
+
 // #######################################
 
 /* Work Routines */
@@ -3012,15 +3032,50 @@ void td_region_end(td_region_t *td_region) {
 	    int len = ldata->provider_param->endPoint - ldata->provider_param->startPoint;
 	    double *X = (double *)malloc(len*sizeof(double));
 	    double y;
+
+	    int p_size = 60;
+            double v_max = 5053.0;
+            double v_r = 0.02;
+
+	    double *a, b;
+            a = (double *)malloc(len*sizeof(double));
+
+            int counts;
+	    double y_pre;
+
 	    if (ldata->iter_count >= ldata->method_param->startPoint && ldata->iter_count < ldata->method_param->endPoint) {
 	        for (int l = 0; l < len; l++) {
 		    X[l] = ldata->provider(ldata->locDom, ldata->locWavePosMax-l);
 		}
 		y = ldata->provider(ldata->locDom, ldata->locWavePosMax);
-	        printf("%d, X: %f, %f, %f, %f, y: %f\n", ldata->iter_count, X[0], X[1], X[2], X[3], y);
+	        //printf("%d, X: %f, %f, %f, %f, y: %f\n", ldata->iter_count, X[0], X[1], X[2], X[3], y);
+
+		// init
+		double V[4] = {890.90, 676.02, 525.09, 416.43};
+
+		// updates
+		b = td_var_regression(ldata->iter_count, len, X, y, a);
+
+	        // prediction
+	        counts = 0;
+		y_pre = V[len-1];
+	        while (y_pre > v_max*v_r && counts <= p_size-10) {
+		    counts++;
+		    y_pre = 0.0;
+                    for (int i = 0; i < len; i++) {
+                        y_pre += a[i]*V[i];
+                    }
+                    y_pre += b;
+                    //printf("%d, a: %f, %f, %f, %f, b: %f, ", ldata->iter_count, a[0], a[1], a[2], a[3], b);
+
+		    for (int i = 1; i < len; i++) {
+		        V[i-1] = V[i];
+		    }
+		    // calibration
+		    V[len-1] = y_pre*exp(-0.12 + 7*v_r);
+	        }
+	        printf("%d, y_pre: %f, predict: %d\n", ldata->iter_count, y_pre, counts+6);
 	    }
-	    //gradient decreasing for regression parameters updating
-            
 	} else {
 	    //printf("Not Implemented!!!\n");
 	}
