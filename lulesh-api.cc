@@ -211,20 +211,6 @@ typedef struct luleshData LULESHData;
  * broadcaster, handling MPI_Bcast, being processed for every iterations
  */
 
-/* objective: peak_velocity */
-void provider_peak_velocity_var(LULESHData *ldata);
-
-void analyzer_peak_velocity_compute_acceleration(LULESHData *ldata);
-
-void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata);
-
-/* objective: threshold */
-void provider_threshold_var(LULESHData *ldata);
-
-void analyzer_threshold_compute_diff(LULESHData *ldata);
-
-void callee_threshold_print_info(LULESHData *ldata);
-
 /* broadcaster */
 void broadcaster(LULESHData *ldata);
 
@@ -2905,59 +2891,6 @@ int main(int argc, char *argv[])
 
 // #################################################
 // helper functions
-void provider_peak_velocity_var(LULESHData *ldata) {
-    ldata->locVel = ldata->locDom->xd(ldata->locWavePos);
-}
-
-void analyzer_peak_velocity_compute_acceleration(LULESHData *ldata) {
-    ldata->locAcc = ldata->locVel - ldata->locVel_old;
-    ldata->locVel_old = ldata->locVel;
-    
-    if (ldata->locAcc < 0.0) {
-	ldata->peak_velocity_condition_is_met = 1;
-    }
-}
-
-void callee_peak_velocity_move_wavePos_one_step_forward(LULESHData *ldata) {
-    if (ldata->peak_velocity_condition_is_met) {
-	printf("# Objective Peak Velocity Reached!:");
-	ldata->locWavePos += 1;
-	ldata->locVel_old = 0.0;
-	ldata->currVel = ldata->locVel;
-	// info
-	printf("workRank: %d:", ldata->workRank);
-	printf("locVel: %f:", ldata->locVel);
-	printf("globalWavePos: %d\n", ldata->locWavePos+ldata->workRank*ldata->locWavePosMax);
-
-	ldata->peak_velocity_condition_is_met = 0;
-    }
-}
-
-void provider_threshold_var(LULESHData *ldata) {
-    ldata->globalVel = ldata->currVel;
-}
-
-void analyzer_threshold_compute_diff(LULESHData *ldata) {
-    ldata->globalDiff = ldata->threshold - ldata->globalVel;
-    if (ldata->globalDiff >= 0.0 && ldata->globalVel > 0.1) {
-        ldata->threshold_condition_is_met = 1;
-    }
-}
-
-void callee_threshold_print_info(LULESHData *ldata) {
-    if (ldata->threshold_condition_is_met) {
-	printf("## Objective Threshold Reached!:");
-        // info
-	printf("myRank: %d:", ldata->myRank);
-	printf("globalVel: %f:", ldata->globalVel);
-	printf("globalDiff: %f:", ldata->globalDiff);
-	printf("cycles: %d\n", ldata->locDom->cycle());
-        //printf("time: %f\n", ldata->locDom->time());
-    
-        //ldata->threshold_condition_is_met = 0;
-    }
-}
-
 void broadcaster(LULESHData *ldata) {
     MPI_Bcast(&ldata->locWavePos, 1, MPI_FLOAT, ldata->workRank, MPI_COMM_WORLD);
     MPI_Bcast(&ldata->threshold_condition_is_met, 1, MPI_INT, ldata->workRank, MPI_COMM_WORLD);
@@ -3031,18 +2964,38 @@ void td_region_begin(td_region_t *td_region) {
 
 void td_region_end(td_region_t *td_region) {
     td_region_t *ldata = td_region;
-    //if (myRank == 0) printf("velocity: %f, Vel: %f, Vel_old: %f\n", locDom->xd(3), ldata->locVel, ldata->locVel_old);
-// RTune_region_end begins
     if (ldata->workRank == ldata->myRank) {
-// objective: peak velocity
-        //provider_peak_velocity_var(ldata); // user defined, considering put the if condition into the provider
-        ldata->locVel = ldata->provider(ldata->locDom, ldata->locWavePos);
-    	analyzer_peak_velocity_compute_acceleration(ldata);
-	callee_peak_velocity_move_wavePos_one_step_forward(ldata);
-// objective: threshold
-        provider_threshold_var(ldata);
-        analyzer_threshold_compute_diff(ldata);
-        callee_threshold_print_info(ldata);
+	if (ldata->method == Variable_Tracking) {
+	    ldata->locVel = ldata->provider(ldata->locDom, ldata->locWavePos);
+	    // compute gradient
+	    ldata->locAcc = ldata->locVel - ldata->locVel_old;
+            ldata->locVel_old = ldata->locVel;
+	    // locate peak at current location
+            if (ldata->locAcc < 0.0) {
+	        printf("# Objective Peak Velocity Reached!:");
+	        ldata->locWavePos += ldata->provider_param->step;
+	        ldata->locVel_old = 0.0;
+	        ldata->currVel = ldata->locVel;
+	        // info
+	        printf("workRank: %d:", ldata->workRank);
+	        printf("locVel: %f:", ldata->locVel);
+	        printf("globalWavePos: %d\n", ldata->locWavePos+ldata->workRank*ldata->locWavePosMax);
+	    }
+	    ldata->globalVel = ldata->currVel;
+	    ldata->globalDiff = ldata->threshold - ldata->globalVel;
+            if (ldata->globalDiff >= 0.0 && ldata->globalVel > 0.1 && !ldata->if_simulation_will_terminate) {
+	        printf("## Objective Threshold Reached!:");
+                // info
+	        printf("myRank: %d:", ldata->myRank);
+	        printf("globalVel: %f:", ldata->globalVel);
+	        printf("globalDiff: %f:", ldata->globalDiff);
+	        printf("cycles: %d\n", ldata->locDom->cycle());
+	    }
+	} else if (ldata->method == Simulation_Prediction) {
+	    //gradient decreasing for regression parameters updating
+	} else {
+	    printf("Not Implemented!!!\n");
+	}
       }
 // broadcast
 #if USE_MPI
