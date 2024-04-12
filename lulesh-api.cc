@@ -191,6 +191,8 @@ struct luleshData
 	int numRanks;
 	int workRank;
         int myRank;
+        // iter counter
+	int iter_count;
 	// provider
 	double (*provider)(Domain *, int);
 	LULESHIterParam *provider_param;
@@ -2823,7 +2825,7 @@ int main(int argc, char *argv[])
    td_region_t *lulesh_region = td_region_init("", locDom);
 // init params
    td_iter_param_t *lulesh_loc = td_iter_param_init(6, 10, 1);
-   td_iter_param_t *lulesh_iter = td_iter_param_init(0, 599, 1);
+   td_iter_param_t *lulesh_iter = td_iter_param_init(50, 599, 1);
 // init provider, given by users
 // double td_var_provider(Domain *locDom, int loc);
 // add analysis
@@ -2956,6 +2958,8 @@ void td_region_add_analysis(td_region_t *td_region, double (*provider)(Domain *,
     ldata->method = method;
 // params
     ldata->method_param = method_param;
+// iter counter
+    ldata->iter_count = 0;
 }
 
 void td_region_begin(td_region_t *td_region) {
@@ -2964,6 +2968,10 @@ void td_region_begin(td_region_t *td_region) {
 
 void td_region_end(td_region_t *td_region) {
     td_region_t *ldata = td_region;
+
+    // iter count update
+    ldata->iter_count++;
+
     if (ldata->workRank == ldata->myRank) {
         if (ldata->method == Data_View) {
 	    for (int i = ldata->provider_param->startPoint; i <= ldata->provider_param->endPoint; i+=ldata->provider_param->step) {
@@ -3000,16 +3008,19 @@ void td_region_end(td_region_t *td_region) {
 	        printf("cycles: %d\n", ldata->locDom->cycle());
 	    }
 	} else if (ldata->method == Simulation_Prediction) {
-	    //gradient decreasing for regression parameters updating
 	    // dist = 4, nlag = 50
-	    if (ldata->locDom->cycle() >= ldata->method_param->startPoint && ldata->locDom->cycle() < ldata->method_param->endPoint) {
-	        ldata->locVel = ldata->provider(ldata->locDom, ldata->locWavePosMax);
-	        double tmp_4 = ldata->provider(ldata->locDom, ldata->locWavePosMax-1);
-	        double tmp_3 = ldata->provider(ldata->locDom, ldata->locWavePosMax-2);
-	        double tmp_2 = ldata->provider(ldata->locDom, ldata->locWavePosMax-3);
-	        double tmp_1 = ldata->provider(ldata->locDom, ldata->locWavePosMax-4);
-	        printf("%d, X: %f, %f, %f, %f, y: %f\n", ldata->locDom->cycle(), tmp_4, tmp_3, tmp_2, tmp_1, ldata->locVel);
+	    int len = ldata->provider_param->endPoint - ldata->provider_param->startPoint;
+	    double *X = (double *)malloc(len*sizeof(double));
+	    double y;
+	    if (ldata->iter_count >= ldata->method_param->startPoint && ldata->iter_count < ldata->method_param->endPoint) {
+	        for (int l = 0; l < len; l++) {
+		    X[l] = ldata->provider(ldata->locDom, ldata->locWavePosMax-l);
+		}
+		y = ldata->provider(ldata->locDom, ldata->locWavePosMax);
+	        printf("%d, X: %f, %f, %f, %f, y: %f\n", ldata->iter_count, X[0], X[1], X[2], X[3], y);
 	    }
+	    //gradient decreasing for regression parameters updating
+            
 	} else {
 	    //printf("Not Implemented!!!\n");
 	}
