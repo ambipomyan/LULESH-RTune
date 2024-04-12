@@ -2822,7 +2822,7 @@ int main(int argc, char *argv[])
 // init td_region
    td_region_t *lulesh_region = td_region_init("", locDom);
 // init params
-   td_iter_param_t *lulesh_loc = td_iter_param_init(1, 30, 1);
+   td_iter_param_t *lulesh_loc = td_iter_param_init(6, 10, 1);
    td_iter_param_t *lulesh_iter = td_iter_param_init(0, 599, 1);
 // init provider, given by users
 // double td_var_provider(Domain *locDom, int loc);
@@ -3001,6 +3001,15 @@ void td_region_end(td_region_t *td_region) {
 	    }
 	} else if (ldata->method == Simulation_Prediction) {
 	    //gradient decreasing for regression parameters updating
+	    // dist = 4, nlag = 50
+	    if (ldata->locDom->cycle() >= ldata->method_param->startPoint && ldata->locDom->cycle() < ldata->method_param->endPoint) {
+	        ldata->locVel = ldata->provider(ldata->locDom, ldata->locWavePosMax);
+	        double tmp_4 = ldata->provider(ldata->locDom, ldata->locWavePosMax-1);
+	        double tmp_3 = ldata->provider(ldata->locDom, ldata->locWavePosMax-2);
+	        double tmp_2 = ldata->provider(ldata->locDom, ldata->locWavePosMax-3);
+	        double tmp_1 = ldata->provider(ldata->locDom, ldata->locWavePosMax-4);
+	        printf("%d, X: %f, %f, %f, %f, y: %f\n", ldata->locDom->cycle(), tmp_4, tmp_3, tmp_2, tmp_1, ldata->locVel);
+	    }
 	} else {
 	    //printf("Not Implemented!!!\n");
 	}
