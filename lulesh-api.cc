@@ -218,7 +218,7 @@ void broadcaster(LULESHData *ldata);
 #define td_region_t     LULESHData
 #define td_iter_param_t LULESHIterParam
 
-enum Methods {Variable_Tracking = 0, Simulation_Prediction = 1};
+enum Methods {Variable_Tracking = 0, Simulation_Prediction = 1, Data_View = 2};
 
 td_region_t *td_region_init(char * td_region_name, Domain *locDom);
 
@@ -2827,7 +2827,7 @@ int main(int argc, char *argv[])
 // init provider, given by users
 // double td_var_provider(Domain *locDom, int loc);
 // add analysis
-   td_region_add_analysis(lulesh_region, td_var_provider, lulesh_loc, Variable_Tracking, lulesh_iter, 25.26, 0);
+   td_region_add_analysis(lulesh_region, td_var_provider, lulesh_loc, Data_View, lulesh_iter, 25.26, 0);
 // init ends
 
 //debug to see region sizes
@@ -2965,7 +2965,15 @@ void td_region_begin(td_region_t *td_region) {
 void td_region_end(td_region_t *td_region) {
     td_region_t *ldata = td_region;
     if (ldata->workRank == ldata->myRank) {
-	if (ldata->method == Variable_Tracking) {
+        if (ldata->method == Data_View) {
+	    for (int i = ldata->provider_param->startPoint; i <= ldata->provider_param->endPoint; i+=ldata->provider_param->step) {
+	        if (i < ldata->provider_param->endPoint) {
+                    printf("%f,", ldata->provider(ldata->locDom, i));
+	        } else {
+	            printf("%f\n", ldata->provider(ldata->locDom, i));
+	        }
+	    }
+	} else if (ldata->method == Variable_Tracking) {
 	    ldata->locVel = ldata->provider(ldata->locDom, ldata->locWavePos);
 	    // compute gradient
 	    ldata->locAcc = ldata->locVel - ldata->locVel_old;
