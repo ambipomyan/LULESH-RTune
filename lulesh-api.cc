@@ -192,9 +192,12 @@ struct luleshData
 	int workRank;
         int myRank;
 	// provider
+	double (*provider)(Domain *, int);
 	LULESHIterParam *provider_param;
+	// method
         int method;
         LULESHIterParam *method_param;
+	// interaction
 	int if_simulation_will_terminate;
 };
 
@@ -235,11 +238,19 @@ td_region_t *td_region_init(char * td_region_name, Domain *locDom);
 
 td_iter_param_t *td_iter_param_init(int start, int end, int step);
 
-void td_region_add_analysis(td_region_t *td_region, td_iter_param_t *provider_param, int method, td_iter_param_t *method_param, double threshold, int if_simulation_is_terminated);
+void td_region_add_analysis(td_region_t *td_region, double (*provider)(Domain *, int), td_iter_param_t *provider_param, int method, td_iter_param_t *method_param, double threshold, int if_simulation_is_terminated);
 
 void td_region_begin(td_region_t *td_region);
 
 void td_region_end(td_region_t *td_region);
+
+// provider, given by users
+double td_var_provider(Domain *locDom, int loc) {
+    double v = locDom->xd(loc);
+
+    return v;
+} 
+
 // #######################################
 
 /* Work Routines */
@@ -2821,11 +2832,16 @@ int main(int argc, char *argv[])
    gettimeofday(&start, NULL) ;
 #endif
 
-// init td_region, params, and analysis
+// init
+// init td_region
    td_region_t *lulesh_region = td_region_init("", locDom);
+// init params
    td_iter_param_t *lulesh_loc = td_iter_param_init(1, 30, 1);
    td_iter_param_t *lulesh_iter = td_iter_param_init(0, 599, 1);
-   td_region_add_analysis(lulesh_region, lulesh_loc, Variable_Tracking, lulesh_iter, 25.26, 0);
+// init provider, given by users
+// double td_var_provider(Domain *locDom, int loc);
+// add analysis
+   td_region_add_analysis(lulesh_region, td_var_provider, lulesh_loc, Variable_Tracking, lulesh_iter, 25.26, 0);
 // init ends
 
 //debug to see region sizes
@@ -2986,10 +3002,11 @@ td_iter_param_t *td_iter_param_init(int start, int end, int step) {
     return lparam;
 }
 
-void td_region_add_analysis(td_region_t *td_region, td_iter_param_t *provider_param, int method, td_iter_param_t *method_param, double threshold, int if_simulation_will_terminate) {
+void td_region_add_analysis(td_region_t *td_region, double (*provider)(Domain *, int), td_iter_param_t *provider_param, int method, td_iter_param_t *method_param, double threshold, int if_simulation_will_terminate) {
     td_region_t *ldata = td_region;
 // provider
     // ldata->provider, object function
+    ldata->provider = provider;
     ldata->provider_param = provider_param;
 // variable tracking
     ldata->locVel_old = 0.0;
@@ -2999,7 +3016,7 @@ void td_region_add_analysis(td_region_t *td_region, td_iter_param_t *provider_pa
     ldata->peak_velocity_condition_is_met = 0;
 // threshold
     ldata->globalDiff = 1.0;
-    ldata->threshold = 25.26;
+    ldata->threshold = threshold;
     ldata->threshold_condition_is_met = 0;
     ldata->if_simulation_will_terminate = if_simulation_will_terminate;
 // method
@@ -3018,8 +3035,9 @@ void td_region_end(td_region_t *td_region) {
 // RTune_region_end begins
     if (ldata->workRank == ldata->myRank) {
 // objective: peak velocity
-        provider_peak_velocity_var(ldata); // user defined, considering put the if condition into the provider
-	analyzer_peak_velocity_compute_acceleration(ldata);
+        //provider_peak_velocity_var(ldata); // user defined, considering put the if condition into the provider
+        ldata->locVel = ldata->provider(ldata->locDom, ldata->locWavePos);
+    	analyzer_peak_velocity_compute_acceleration(ldata);
 	callee_peak_velocity_move_wavePos_one_step_forward(ldata);
 // objective: threshold
         provider_threshold_var(ldata);
