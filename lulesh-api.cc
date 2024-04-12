@@ -240,26 +240,35 @@ double td_var_provider(Domain *locDom, int loc) {
 } 
 
 // regression
-double td_var_regression(int iters, int model_size, double *X, double y, double *a) {
-    double b;
+void td_var_regression(int iters, int model_size, double *X, double y, double *a) {
     // init
     for (int i = 0; i < model_size; i++) {
         a[i] = 0.1;
     }
-    b = 0.0;
 
-    //compute
-    a[0] = 0.6049 + 0.0001*iters;
-    a[1] = 0.2628;
-    a[2] = -0.0444;
-    a[3] = -0.00396;
+    //gradient decresing
+    double lr = 0.01;
+    double loss = 1.0;
+    double *temp_step = (double *)malloc((model_size)*sizeof(double));
 
-    b = 2.237;
+    for (int i = 0; i < iters; i++) {
+        // compute gradient
+	for (int i = 0; i < model_size; i++) {
+	    
+	}
+	// compute loss
+	
+    }
+/*
+    a[1] = 0.6049+iters*0.0001;
+    a[2] = 0.2628;
+    a[3] = -0.0444;
+    a[4] = -0.00396;
 
-    return b;
+    a[0] = 2.237;
+ */
 }
-
-// #######################################
+// ##########
 
 /* Work Routines */
 
@@ -3029,7 +3038,8 @@ void td_region_end(td_region_t *td_region) {
 	    }
 	} else if (ldata->method == Simulation_Prediction) {
 	    // dist = 4, nlag = 50
-	    int len = ldata->provider_param->endPoint - ldata->provider_param->startPoint;
+	    int len = ldata->provider_param->endPoint - ldata->provider_param->startPoint + 1; // [1, x1, x2, x3, ...]
+	    
 	    double *X = (double *)malloc(len*sizeof(double));
 	    double y;
 
@@ -3037,44 +3047,43 @@ void td_region_end(td_region_t *td_region) {
             double v_max = 5053.0;
             double v_r = 0.02;
 
-	    double *a, b;
+	    double *a;
             a = (double *)malloc(len*sizeof(double));
 
             int counts;
 	    double y_pre;
 
 	    if (ldata->iter_count >= ldata->method_param->startPoint && ldata->iter_count < ldata->method_param->endPoint) {
-	        for (int l = 0; l < len; l++) {
+	        for (int l = 1; l < len; l++) {
 		    X[l] = ldata->provider(ldata->locDom, ldata->locWavePosMax-l);
 		}
+		X[0] = 1.00;
 		y = ldata->provider(ldata->locDom, ldata->locWavePosMax);
-	        //printf("%d, X: %f, %f, %f, %f, y: %f\n", ldata->iter_count, X[0], X[1], X[2], X[3], y);
 
 		// init
-		double V[4] = {890.90, 676.02, 525.09, 416.43};
+		double V[5] = {1.00, 416.43, 525.09, 676.02, 890.90}; // locs 9, 8, 7, 6
 
 		// updates
-		b = td_var_regression(ldata->iter_count, len, X, y, a);
+		td_var_regression(10, len, X, y, a);
 
 	        // prediction
 	        counts = 0;
-		y_pre = V[len-1];
+		y_pre = V[1];
 	        while (y_pre > v_max*v_r && counts <= p_size-10) {
 		    counts++;
 		    y_pre = 0.0;
                     for (int i = 0; i < len; i++) {
                         y_pre += a[i]*V[i];
                     }
-                    y_pre += b;
-                    //printf("%d, a: %f, %f, %f, %f, b: %f, ", ldata->iter_count, a[0], a[1], a[2], a[3], b);
 
-		    for (int i = 1; i < len; i++) {
+		    for (int i = 2; i < len; i++) {
 		        V[i-1] = V[i];
 		    }
 		    // calibration
+		    V[0] = 1.00;
 		    V[len-1] = y_pre*exp(-0.12 + 7*v_r);
 	        }
-	        printf("%d, y_pre: %f, predict: %d\n", ldata->iter_count, y_pre, counts+6);
+	        printf("%d, X: %f, %f, %f, %f, %f, y_pre: %f, predict: %d\n", ldata->iter_count, X[0], X[1], X[2], X[3], X[4], y_pre, counts+6);
 	    }
 	} else {
 	    //printf("Not Implemented!!!\n");
