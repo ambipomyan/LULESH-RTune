@@ -240,33 +240,36 @@ double td_var_provider(Domain *locDom, int loc) {
 } 
 
 // regression
-void td_var_regression(int iters, int model_size, double *X, double y, double *a) {
-    // init
-    for (int i = 0; i < model_size; i++) {
-        a[i] = 0.1;
-    }
-
-    //gradient decresing
-    double lr = 0.01;
-    double loss = 1.0;
+void td_var_regression(int iters, int model_size, double lr, int batch_size, double *X, double *y, double *a) {
     double *temp_step = (double *)malloc((model_size)*sizeof(double));
 
-    for (int i = 0; i < iters; i++) {
+    for (int k = 0; k < iters; k++) {
         // compute gradient
 	for (int i = 0; i < model_size; i++) {
-	    
+	    double sum = 0.0;
+	    for (int b = 0; b < batch_size; b++) {
+		double hx = 0.0;
+	        for (int j  = 0; j < model_size; j++) {
+	            hx += a[j] * X[b*model_size+j];
+	        }
+	        sum += (hx - y[b]) * X[b*model_size+i];
+	    }
+	    temp_step[i] = sum / batch_size* lr;
+	    a[i] -= temp_step[i];
 	}
 	// compute loss
-	
+	// ...	
     }
+
 /*
-    a[1] = 0.6049+iters*0.0001;
+    a[1] = 0.6049;
     a[2] = 0.2628;
     a[3] = -0.0444;
     a[4] = -0.00396;
 
     a[0] = 2.237;
  */
+    
 }
 // ##########
 
@@ -2854,7 +2857,7 @@ int main(int argc, char *argv[])
    td_region_t *lulesh_region = td_region_init("", locDom);
 // init params
    td_iter_param_t *lulesh_loc = td_iter_param_init(6, 10, 1);
-   td_iter_param_t *lulesh_iter = td_iter_param_init(50, 599, 1);
+   td_iter_param_t *lulesh_iter = td_iter_param_init(50, 812, 10);
 // init provider, given by users
 // double td_var_provider(Domain *locDom, int loc);
 // add analysis
@@ -3040,50 +3043,56 @@ void td_region_end(td_region_t *td_region) {
 	    // dist = 4, nlag = 50
 	    int len = ldata->provider_param->endPoint - ldata->provider_param->startPoint + 1; // [1, x1, x2, x3, ...]
 	    
-	    double *X = (double *)malloc(len*sizeof(double));
-	    double y;
+	    double *X = (double *)malloc(len*ldata->method_param->step*sizeof(double));
+	    double *y = (double *)malloc(ldata->method_param->step*sizeof(double));
 
 	    int p_size = 60;
             double v_max = 5053.0;
-            double v_r = 0.02;
+            double v_r = 0.0075;
 
 	    double *a;
             a = (double *)malloc(len*sizeof(double));
+            for (int i = 0; i < len; i++) {
+                a[i] = 0.2;
+            }
 
             int counts;
 	    double y_pre;
 
 	    if (ldata->iter_count >= ldata->method_param->startPoint && ldata->iter_count < ldata->method_param->endPoint) {
+		int colId = ldata->iter_count%ldata->method_param->step;
 	        for (int l = 1; l < len; l++) {
-		    X[l] = ldata->provider(ldata->locDom, ldata->locWavePosMax-l);
+		    X[colId*len+l] = ldata->provider(ldata->locDom, ldata->locWavePosMax-l);
 		}
-		X[0] = 1.00;
-		y = ldata->provider(ldata->locDom, ldata->locWavePosMax);
+		X[colId*len] = 1.00;
+		y[colId] = ldata->provider(ldata->locDom, ldata->locWavePosMax);
 
 		// init
 		double V[5] = {1.00, 416.43, 525.09, 676.02, 890.90}; // locs 9, 8, 7, 6
 
 		// updates
-		td_var_regression(10, len, X, y, a);
+		if (colId == 9) {
+		    td_var_regression(10000, len, 0.0001, ldata->method_param->step, X, y, a);
 
-	        // prediction
-	        counts = 0;
-		y_pre = V[1];
-	        while (y_pre > v_max*v_r && counts <= p_size-10) {
-		    counts++;
-		    y_pre = 0.0;
-                    for (int i = 0; i < len; i++) {
-                        y_pre += a[i]*V[i];
-                    }
+	            // prediction
+	            counts = 0;
+		    y_pre = V[1];
+	            while (y_pre > v_max*v_r && counts <= p_size-10) {
+		        counts++;
+		        y_pre = 0.0;
+                        for (int i = 0; i < len; i++) {
+                            y_pre += a[i]*V[i];
+                        }
 
-		    for (int i = 2; i < len; i++) {
-		        V[i-1] = V[i];
-		    }
-		    // calibration
-		    V[0] = 1.00;
-		    V[len-1] = y_pre*exp(-0.12 + 7*v_r);
-	        }
-	        printf("%d, X: %f, %f, %f, %f, %f, y_pre: %f, predict: %d\n", ldata->iter_count, X[0], X[1], X[2], X[3], X[4], y_pre, counts+6);
+		        for (int i = 2; i < len; i++) {
+		            V[i-1] = V[i];
+		        }
+		        // calibration
+		        V[0] = 1.00;
+		        V[len-1] = y_pre*exp(-0.12 - 7*v_r);
+	            }
+	            if (!isnan(a[1]) && !isinf(a[1])) printf("%d, a: %f, %f, %f, %f, %f, y_pre: %f, predict: %d\n", ldata->iter_count, a[0], a[1], a[2], a[3], a[4], y_pre, counts+6);
+		}
 	    }
 	} else {
 	    //printf("Not Implemented!!!\n");
